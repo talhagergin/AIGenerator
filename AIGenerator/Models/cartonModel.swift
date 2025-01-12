@@ -7,30 +7,44 @@
 
 import Foundation
 
-struct cartonModel: Decodable {
-    let data: TaskData?
-    let errorCode: Int
-    let errorDetail: ErrorDetail
-    let logID: String
-    let requestID: String
-    let taskStatus: Int
+struct APICartonResponseModel: Decodable {
+    let data: TaskData
+    let error_code: Int
+    let error_detail: ErrorDetail
+    let log_id: String
+    let request_id: String
+    let task_id: String
+    let task_type: String
+    
+     struct TaskData: Decodable {
+         let status: String
+    }
 
-    enum CodingKeys: String, CodingKey {
-        case data
-        case errorCode = "error_code"
-        case errorDetail = "error_detail"
-        case logID = "log_id"
-        case requestID = "request_id"
-        case taskStatus = "task_status"
+    struct ErrorDetail: Decodable {
+        let status_code: Int
+        let code: String
+        let code_message: String
+        let message: String
     }
 }
 
-struct TaskData: Decodable {
-    let status: String
-    let resultURL: String
+struct cartonModel: Decodable {
+    let data: CartoonData?
+    let error_code: Int
+    let error_detail: ErrorDetail
+    let log_id: String
+    let request_id: String
+    let task_status: Int
 
-    enum CodingKeys: String, CodingKey {
-        case status
-        case resultURL = "result_url"
+    struct CartoonData: Decodable {
+        let status: String
+        let result_url: String?
+    }
+
+    struct ErrorDetail: Decodable {
+        let status_code: Int
+        let code: String
+        let code_message: String
+        let message: String
     }
 }

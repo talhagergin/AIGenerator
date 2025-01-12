@@ -1,118 +1,111 @@
-//
-//  ImageUploadView.swift
-//  AIGenerator
-//
-//  Created by Talha Gergin on 12.01.2025.
-//
 import SwiftUI
-import PhotosUI
 
 struct ImageUploadView: View {
     @State private var selectedImage: UIImage?
-    @State private var isShowingPhotoPicker = false
-    @State private var isUploading = false
-    @State private var uploadResult: String?
-    @State private var error: Error?
-    @State private var taskID: String?
-    @State private var cartonResult: cartonModel?
-    @State private var isFetchingResult = false
+    @State private var cartoonImage: UIImage?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+     @State private var showImage = false
+    
+     private let imageUploadClient = ImageUploadClient()
+     private let getCartoonClient = getCartonClient()
 
     var body: some View {
         VStack {
-            if let image = selectedImage {
-                Image(uiImage: image)
+            if let selectedImage = selectedImage {
+                Image(uiImage: selectedImage)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 300, maxHeight: 300)
+                    .frame(width: 200, height: 200)
             } else {
-                Text("Lütfen Bir Fotoğraf Seçin")
-                    .frame(maxWidth: 300, maxHeight: 300)
-                    .border(.gray)
+                Text("Resim seçilmedi.")
+                    .frame(width: 200, height: 200)
+                    .border(Color.gray)
             }
 
-            HStack {
-                Button("Fotoğraf Seç") {
-                    isShowingPhotoPicker = true
-                }
-                
-                Button("Fotoğrafı Yükle") {
-                    uploadImage()
-                }.disabled(selectedImage == nil || isUploading)
-            }
-            .padding()
-
-            if isUploading {
-                ProgressView("Yükleniyor...")
-            }
-
-            if let result = uploadResult {
-                Text("Yükleme Başarılı!\nSonuç:\n\(result)")
-                    .padding()
-            }
+             Button("Resim Seç") {
+                            showImage.toggle()
+                        }
+                        .sheet(isPresented: $showImage, content: {
+                            ImagePicker(selectedImage: $selectedImage)
+                        })
             
-            if let taskID = taskID, !isFetchingResult {
-                Button("Sonucu Getir") {
-                    fetchTaskResult(taskId: taskID)
-                }
-            }
-            
-            if isFetchingResult {
-                ProgressView("Sonuç Alınıyor...")
-            }
-            
-            if let cartonResult = cartonResult {
-                Text("Sonuç URL: \(cartonResult.data?.resultURL ?? "URL Yok")")
-                    .padding()
-            }
+            Button("Cartoonlaştır") {
+                            Task {
+                                await uploadAndFetchCartoon()
+                            }
+                        }
+                        .disabled(selectedImage == nil || isLoading)
 
-            if let error = error {
-                Text("Hata: \(error.localizedDescription)")
-                    .foregroundColor(.red)
-                    .padding()
+            
+            if isLoading {
+                            ProgressView("Lütfen Bekleyin...")
+                        }
+
+            if let cartoonImage = cartoonImage {
+                Image(uiImage: cartoonImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 200, height: 200)
             }
+             if let errorMessage = errorMessage {
+                 Text("Hata: \(errorMessage)")
+                     .foregroundColor(.red)
+             }
         }
-        .sheet(isPresented: $isShowingPhotoPicker) {
-            ImagePicker(selectedImage: $selectedImage)
-        }
+        .padding()
     }
-    
-     func uploadImage() {
-            guard let image = selectedImage, let imageData = image.jpegData(compressionQuality: 0.8) else {
+
+    func uploadAndFetchCartoon() async {
+        isLoading = true
+        errorMessage = nil
+
+        guard let image = selectedImage?.jpegData(compressionQuality: 0.8) else {
+             errorMessage = "Geçersiz resim verisi."
+                isLoading = false
+            return
+        }
+
+        do {
+           
+            guard let taskId = try await imageUploadClient.uploadImage(image: image, index: "0", mimeType: "image/jpeg") else{
+                errorMessage = "Task ID alınırken bir sorun oluştu"
+                isLoading = false
                 return
             }
-         isUploading = true
-         uploadResult = nil
-         error = nil
-         
-         Task {
-             do {
-                 let client = ImageUploadClient()
-                  let response = try await client.uploadImage(image: imageData, index: "0")
-                 
-                 uploadResult = "Request ID: \(response.requestID)\nTask ID: \(response.taskID)\nStatus Code: \(response.errorDetail.statusCode)"
-                 self.taskID = response.taskID
-             } catch {
-                 self.error = error
-                 print("Upload failed: \(error)")
-             }
-             isUploading = false
-         }
-     }
-    
-    func fetchTaskResult(taskId: String) {
-        isFetchingResult = true
-        cartonResult = nil
-        error = nil
-        
-        Task {
-            do {
-                let client = getCartonClient()
-                let result = try await client.getTaskResult(taskId: taskId)
-                cartonResult = result
-            } catch {
-                self.error = error
+            
+             var fetchedCartoonImage : cartonModel?
+           
+            while (fetchedCartoonImage?.data?.result_url == nil){
+                try await Task.sleep(nanoseconds: 1_000_000_000) // 1 sn bekle
+                fetchedCartoonImage = try await getCartoonClient.getTaskResult(taskId: taskId)
             }
-            isFetchingResult = false
+                
+            if let imageURL = fetchedCartoonImage?.data?.result_url, let url = URL(string: imageURL) {
+                 if let (imageData, _) = try? await URLSession.shared.data(from: url), let uiImage = UIImage(data: imageData){
+                     cartoonImage = uiImage
+                 } else {
+                      errorMessage = "Resim verisi alınamadı."
+                  }
+            } else {
+                errorMessage = "Image url alınırken sorun oluştu."
+            }
+           
+            
+        } catch let error as NetworkError {
+             errorMessage = "Ağ hatası: \(error)"
+        } catch {
+              errorMessage = "Bilinmeyen bir hata oluştu: \(error)"
         }
+
+        isLoading = false
     }
 }
+
+
+/*
+#Preview {
+    ImageUploadView()
+}
+*/
